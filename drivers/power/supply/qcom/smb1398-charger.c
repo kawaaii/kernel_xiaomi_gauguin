@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #define pr_fmt(fmt) "SMB1398: %s: " fmt, __func__
@@ -228,10 +229,12 @@
 #define CC_MODE_VOTER			"CC_MODE_VOTER"
 #define MAIN_DISABLE_VOTER		"MAIN_DISABLE_VOTER"
 #define TAPER_MAIN_ICL_LIMIT_VOTER	"TAPER_MAIN_ICL_LIMIT_VOTER"
+#define SIX_PIN_VFLOAT_VOTER		"SIX_PIN_VFLOAT_VOTER"
 
 /* Constant definitions */
+/* Need to define max ILIM for smb1398 */
 #define DIV2_MAX_ILIM_UA		5000000
-#define DIV2_MAX_ILIM_DUAL_CP_UA	10000000
+#define DIV2_MAX_ILIM_DUAL_CP_UA	6400000
 #define DIV2_ILIM_CFG_PCT		105
 
 #define TAPER_STEPPER_UA_DEFAULT	100000
@@ -451,7 +454,7 @@ static int smb1398_set_iin_ma(struct smb1398_chip *chip, int iin_ma)
 	if (rc < 0)
 		return rc;
 
-	dev_dbg(chip->dev, "set iin_ma = %dmA\n", iin_ma);
+	dev_err(chip->dev, "set iin_ma = %dmA\n", iin_ma);
 	return rc;
 }
 
@@ -467,7 +470,7 @@ static int smb1398_set_ichg_ma(struct smb1398_chip *chip, int ichg_ma)
 	rc = smb1398_masked_write(chip, ICHG_SS_DAC_TARGET_REG,
 			ICHG_SS_DAC_VALUE_MASK, val);
 
-	dev_dbg(chip->dev, "set ichg %dmA\n", ichg_ma);
+	dev_err(chip->dev, "set ichg %dmA\n", ichg_ma);
 	return rc;
 }
 
@@ -628,7 +631,7 @@ static int smb1398_div2_cp_get_irq_status(
 
 	*status = ilim << 6 | irev << 3 | tsd << 2 | off_vin << 1 | off_win;
 
-	dev_dbg(chip->dev, "irq_status = 0x%x\n", *status);
+	dev_err(chip->dev, "irq_status = 0x%x\n", *status);
 	return rc;
 }
 
@@ -645,7 +648,7 @@ static int smb1398_div2_cp_switcher_en(struct smb1398_chip *chip, bool en)
 
 	chip->switcher_en = en;
 
-	dev_dbg(chip->dev, "%s switcher\n", en ? "enable" : "disable");
+	dev_err(chip->dev, "%s switcher\n", en ? "enable" : "disable");
 	return rc;
 }
 
@@ -786,7 +789,7 @@ unlock:
 	mutex_unlock(&chip->die_chan_lock);
 	if (rc >= 0) {
 		*isns_ua = calculate_div2_cp_isns_ua(temp);
-		dev_dbg(chip->dev, "master isns = %duA\n", *isns_ua);
+		dev_err(chip->dev, "master isns = %duA\n", *isns_ua);
 	}
 
 	return rc;
@@ -1411,8 +1414,8 @@ static int smb1398_div2_cp_ilim_vote_cb(struct votable *votable,
 	max_ilim_ua = is_cps_available(chip) ?
 		DIV2_MAX_ILIM_DUAL_CP_UA : DIV2_MAX_ILIM_UA;
 	ilim_ua = min(ilim_ua, max_ilim_ua);
-	if (ilim_ua < min_ilim_ua) {
-		dev_dbg(chip->dev, "ilim %duA is too low to config CP charging\n",
+	if (ilim_ua < chip->div2_cp_min_ilim_ua) {
+		dev_err(chip->dev, "ilim %duA is too low to config CP charging\n",
 				ilim_ua);
 		vote(chip->div2_cp_disable_votable, ILIM_VOTER, true, 0);
 	} else {
@@ -1445,7 +1448,7 @@ static int smb1398_div2_cp_ilim_vote_cb(struct votable *votable,
 					rc);
 			return rc;
 		}
-		dev_dbg(chip->dev, "set CP master ilim to %duA\n", ilim_ua);
+		dev_err(chip->dev, "set CP master ilim to %duA\n", ilim_ua);
 		vote(chip->div2_cp_disable_votable, ILIM_VOTER, false, 0);
 	}
 
@@ -1519,7 +1522,7 @@ static irqreturn_t default_irq_handler(int irq, void *data)
 
 	for (i = 0; i < NUM_IRQS; i++) {
 		if (irq == chip->irqs[i]) {
-			dev_dbg(chip->dev, "IRQ %s triggered\n",
+			dev_err(chip->dev, "IRQ %s triggered\n",
 					smb_irqs[i].name);
 			chip->div2_irq_status |= 1 << smb_irqs[i].shift;
 		}
@@ -1878,6 +1881,12 @@ static void smb1398_taper_work(struct work_struct *work)
 	min_ilim_ua = smb1398_div2_cp_get_min_icl(chip);
 
 	chip->taper_entry_fv = get_effective_result(chip->fv_votable);
+
+	if ((strcmp(get_effective_client(chip->fv_votable), "SIX_PIN_VFLOAT_VOTER") == 0)) {
+		dev_err(chip->dev, "get CHARGE_FV=%d uv\n", chip->taper_entry_fv);
+		goto out;
+	}
+
 	while (true) {
 		rc = power_supply_get_property(chip->batt_psy,
 				POWER_SUPPLY_PROP_CHARGE_TYPE, &pval);
@@ -1889,7 +1898,7 @@ static void smb1398_taper_work(struct work_struct *work)
 
 		fv_uv = get_effective_result(chip->fv_votable);
 		if (fv_uv > chip->taper_entry_fv) {
-			dev_dbg(chip->dev, "Float voltage increased (%d-->%d)uV, exit!\n",
+			dev_err(chip->dev, "Float voltage increased (%d-->%d)uV, exit!\n",
 					chip->taper_entry_fv, fv_uv);
 			vote(chip->div2_cp_disable_votable, TAPER_VOTER,
 					false, 0);
@@ -1904,7 +1913,7 @@ static void smb1398_taper_work(struct work_struct *work)
 				TAPER_STEPPER_UA_DEFAULT;
 			fcc_ua = get_effective_result(chip->fcc_votable)
 				- stepper_ua;
-			dev_dbg(chip->dev, "Taper stepper reduce FCC to %d\n",
+			dev_err(chip->dev, "Taper stepper reduce FCC to %d\n",
 					fcc_ua);
 			vote(chip->fcc_votable, CP_VOTER, true, fcc_ua);
 			fcc_ua -= main_fcc_ua;
@@ -1935,7 +1944,7 @@ static void smb1398_taper_work(struct work_struct *work)
 					chip->div2_cp_slave_disable_votable);
 			if ((fcc_ua < chip->ilim_ua_disable_div2_cp_slave) &&
 					slave_en && is_cps_available(chip)) {
-				dev_dbg(chip->dev, "Disable slave CP in taper\n");
+				dev_err(chip->dev, "Disable slave CP in taper\n");
 				vote(chip->div2_cp_slave_disable_votable,
 						TAPER_VOTER, true, 0);
 				vote_override(chip->div2_cp_ilim_votable,
@@ -1950,12 +1959,12 @@ static void smb1398_taper_work(struct work_struct *work)
 					  chip->cc_mode_taper_main_icl_ua);
 			}
 		} else {
-			dev_dbg(chip->dev, "Not in taper, exit!\n");
+			dev_err(chip->dev, "Not in taper, exit!\n");
 		}
 		msleep(500);
 	}
 out:
-	dev_dbg(chip->dev, "exit taper work\n");
+	dev_err(chip->dev, "exit taper work\n");
 	vote(chip->fcc_votable, CP_VOTER, false, 0);
 	vote(chip->awake_votable, TAPER_VOTER, false, 0);
 	chip->taper_work_running = false;
@@ -2099,6 +2108,18 @@ static int smb1398_div2_cp_hw_init(struct smb1398_chip *chip)
 		dev_err(chip->dev, "set OP_MODE_COMBO failed, rc=%d\n", rc);
 		return rc;
 	}
+
+	/* Do not disable FP_FET during IREV conditions */
+	rc = smb1398_masked_write(chip, MISC_CFG0_REG, CFG_DIS_FPF_IREV_BIT, 0);
+	if (rc < 0) {
+		dev_err(chip->dev, "Couldn't set CFG_DIS_FPF_IREV_BIT, rc=%d\n",
+				rc);
+		return rc;
+	}
+
+	rc = smb1398_masked_write(chip, NOLOCK_SPARE_REG, DIV2_WIN_UV_SEL_BIT, 0x00);
+	if (rc < 0)
+		dev_err(chip->dev, "set NOLOCK_SPARE_REG failed, rc=%d\n", rc);
 
 	/* Do not disable FP_FET during IREV conditions */
 	rc = smb1398_masked_write(chip, MISC_CFG0_REG, CFG_DIS_FPF_IREV_BIT, 0);
@@ -2269,7 +2290,7 @@ static int smb1398_div2_cp_master_probe(struct smb1398_chip *chip)
 		return rc;
 	}
 
-	dev_dbg(chip->dev, "smb1398 DIV2_CP master is probed successfully\n");
+	dev_err(chip->dev, "smb1398 DIV2_CP master is probed successfully\n");
 
 	return 0;
 destroy_votable:
