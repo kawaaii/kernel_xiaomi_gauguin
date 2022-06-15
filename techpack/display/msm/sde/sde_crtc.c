@@ -6350,7 +6350,11 @@ void sde_crtc_touch_notify(void)
 			break;
 		}
 
-		if (dsi_display && dsi_display->is_prim_display && dsi_display->panel) {
+		if (dsi_display &&
+#if IS_ENABLED(CONFIG_MI_DRM_OPT)
+			dsi_display->is_prim_display &&
+#endif
+			dsi_display->panel) {
 			if (dsi_display->panel->mi_cfg.idle_fps
 					&& dsi_display->panel->cur_mode
 					&& (dsi_display->panel->cur_mode->timing.refresh_rate ==
