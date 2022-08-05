@@ -192,7 +192,7 @@
 	qcom,dsi-default-panel = <&dsi_rm69299_visionox_amoled_video>;
 };
 
-&qupv3_se0_i2c {
+/*&qupv3_se0_i2c {
 	status = "ok";
 	#address-cells = <1>;
 	#size-cells = <0>;
@@ -212,7 +212,7 @@
 		pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend
 				&nfc_clk_req_suspend>;
 	};
-};
+};*/
 
 &qupv3_se8_i2c {
 	status = "okay";
