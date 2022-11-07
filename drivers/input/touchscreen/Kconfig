@@ -1339,6 +1339,13 @@ config TOUCHSCREEN_SYNAPTICS_DSX
 
 source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
 
+config SPI_XIAOMI_TP
+	bool
+	depends on SPI
+	default y if TOUCHSCREEN_NT36xxx_HOSTDL_SPI
+	help
+	Say Y if want use xiaomi touch panel.
+
 config TOUCHSCREEN_SYNAPTICS_TCM
 	bool "Synaptics TCM Touchscreen Driver"
 	depends on I2C
