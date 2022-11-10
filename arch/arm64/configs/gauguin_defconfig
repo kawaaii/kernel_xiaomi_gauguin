@@ -1649,7 +1649,7 @@ CONFIG_UID_SYS_STATS=y
 # CONFIG_ECHO is not set
 # CONFIG_MISC_RTSX_PCI is not set
 # CONFIG_MISC_RTSX_USB is not set
-# CONFIG_FPR_FPC is not set
+CONFIG_FPR_FPC=y
 
 #
 # qrc device driver
