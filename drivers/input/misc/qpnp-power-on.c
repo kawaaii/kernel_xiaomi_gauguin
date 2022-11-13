@@ -1191,7 +1191,7 @@ static void collect_d_work_func(struct work_struct *work)
 	bool volp_scan = 0;
 	struct qpnp_pon_config *cfg = NULL;
 
-	volp_scan = !pmic_gpio_get_external("c440000.qcom,spmi:qcom,pm8150@0:pinctrl@c000", 2);
+	volp_scan = !pmic_gpio_get_external("c440000.qcom,spmi:qcom,pm6150l@4:pinctrl@c000", 1);
 
 	/* Scan volp to decide whether to enable k_r S2 reset */
 	cfg = qpnp_get_cfg(pon, PON_KPDPWR_RESIN);
@@ -2685,7 +2685,7 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 
 	pon->store_hard_reset_reason = of_property_read_bool(dev->of_node,
 					"qcom,store-hard-reset-reason");
-
+	dev_dbg(dev, "pon->kpdpwr_dbc_enable = %d\n", pon->kpdpwr_dbc_enable);
 	if (of_property_read_bool(dev->of_node, "qcom,secondary-pon-reset")) {
 		if (sys_reset) {
 			dev_err(dev, "qcom,system-reset property shouldn't be used along with qcom,secondary-pon-reset property\n");
